@@ -43,14 +43,30 @@ pglz_decompress_vanilla(const char *source, int32 slen, char *dest,
 int32
 pglz_decompress_hacked(const char *source, int32 slen, char *dest,
 						 int32 rawsize, bool check_complete);
+int32
+pglz_decompress_hacked2(const char *source, int32 slen, char *dest,
+						 int32 rawsize, bool check_complete);
 
 compress_func compressors[] = {pglz_compress_vanilla};
 char *compressor_name[] = {"pglz_compress_vanilla"};
 int compressors_count = 1;
 
-decompress_func decompressors[] = {pglz_decompress_vanilla, pglz_decompress_hacked};
-char *decompressor_name[] = {"pglz_decompress_vanilla", "pglz_decompress_hacked"};
-int decompressors_count = 2;
+decompress_func decompressors[] =
+{
+	pglz_decompress_vanilla,
+	pglz_decompress_hacked,
+	pglz_decompress_hacked2,
+	pglz_decompress_vanilla,
+};
+char *decompressor_name[] = 
+{
+	"pglz_decompress_vanilla - warmup", /* do vanilla test at the beginning and at the end */
+	"pglz_decompress_hacked",
+	"pglz_decompress_hacked2",
+	"pglz_decompress_vanilla",
+};
+
+int decompressors_count = 4;
 
 char* payloads[] = {"000000010000000000000006"};
 int payload_count = 1;
