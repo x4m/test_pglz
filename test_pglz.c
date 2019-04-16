@@ -116,9 +116,10 @@ void do_test(int compressor, int decompressor, int payload)
 		elog(ERROR, "decompressed different data");
 	
 	ereport(LOG,
-		(errmsg("Compression %d\t(%f seconds)\tDecompression %d\t(%f seconds)",
+		(errmsg("Compression %d\t(%f seconds)\tDecompression %d\t(%f seconds)\tRatio %f",
 			copmression_end - compression_begin, ((float)copmression_end - compression_begin) / CLOCKS_PER_SEC,
-			decopmression_end - decompression_begin, ((float)decopmression_end - decompression_begin) / CLOCKS_PER_SEC),
+			decopmression_end - decompression_begin, ((float)decopmression_end - decompression_begin) / CLOCKS_PER_SEC,
+			comp_size/(float)size),
 		errhidestmt(true)));
 
 	pfree(data);
