@@ -5,7 +5,7 @@ OBJS = test_pglz.o pg_lzcompress_vanilla.o pg_lzcompress_hacked.o $(WIN32RES)
 PGFILEDESC = "test_pglz - test code for different pglz implementations"
 
 EXTENSION = test_pglz
-DATA = test_pglz--1.0.sql
+DATA = test_pglz--1.0.sql 000000010000000000000006
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config

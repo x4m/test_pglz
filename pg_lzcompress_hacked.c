@@ -59,9 +59,11 @@ pglz_decompress_hacked(const char *source, int32 slen, char *dest,
 				{
 					memcpy(dp, dp - off, off);
 					len -= off;
+					dp+=off;
 					off *= 2;
 				}
 				memcpy(dp, dp - off, len);
+				dp+=len;
 			}
 			else
 			{
