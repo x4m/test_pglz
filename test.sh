@@ -4,7 +4,7 @@ set -e
 pkill -9 postgres || true
 make install
 
-DB=~/DemoDb
+DB=~/DemoDb1
 BINDIR=~/project/bin
 
 rm -rf $DB
