@@ -71,44 +71,26 @@ char *decompressor_name[] =
 
 int decompressors_count = 4;
 
-char* payloads[] = 
+char *payload_names[] =
 {
 	"000000010000000000000001",
 	"000000010000000000000006",
 	"16398",
 };
+void **payloads;
+long *payload_sizes;
 int payload_count = 3;
 
 /* benchmark returns ns per byte of payload to decompress */
 double do_test(int compressor, int decompressor, int payload)
 {
-	char share_path[MAXPGPATH];
-	char path[MAXPGPATH];
-	FILE *f;
-	long size;
-
 	ereport(LOG,
 		(errmsg("Testing payload %s\tcompressor %s\tdecompressor %s",
-			payloads[payload], compressor_name[compressor], decompressor_name[decompressor]),
+			payload_names[payload], compressor_name[compressor], decompressor_name[decompressor]),
 		errhidestmt(true)));
-
-	get_share_path(my_exec_path, share_path);
-	snprintf(path, MAXPGPATH, "%s/extension/%s", share_path, payloads[payload]);
-	f = fopen(path, "r");
-	if (!f)
-		elog(ERROR, "unable to open payload");
-
-	fseek (f , 0 , SEEK_END);
-	size = ftell (f);
- 	rewind (f);
-	
-	void* data = palloc(size);
-	void* extracted_data = palloc(size);
-
-	if (fread(data, size, 1, f) != 1)
-		elog(ERROR, "unable to read payload");
-	fclose(f);
-
+	void *data = payloads[payload];
+	long size = payload_sizes[payload];
+	void *extracted_data = palloc(size);
 	void *compressed = palloc(size * 2);
 
 	compressors[compressor](data, size, compressed, PGLZ_strategy_default);
@@ -131,11 +113,42 @@ double do_test(int compressor, int decompressor, int payload)
 			comp_size/(float)size),
 		errhidestmt(true)));
 
-	pfree(data);
 	pfree(extracted_data);
 	pfree(compressed);
 
 	return ((double)decopmression_end - decompression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
+}
+
+static void prepare_payloads()
+{
+	payloads = palloc(sizeof(void*) * payload_count);
+	payload_sizes = palloc(sizeof(long) * payload_count);
+
+	char share_path[MAXPGPATH];
+	char path[MAXPGPATH];
+	FILE *f;
+	long size;
+
+	for (int i=0; i< payload_count; i++)
+	{
+		get_share_path(my_exec_path, share_path);
+		snprintf(path, MAXPGPATH, "%s/extension/%s", share_path, payload_names[i]);
+		f = fopen(path, "r");
+		if (!f)
+			elog(ERROR, "unable to open payload");
+
+		fseek (f , 0 , SEEK_END);
+		size = ftell (f);
+		rewind (f);
+		
+		void* data = palloc(size);
+
+		if (fread(data, size, 1, f) != 1)
+			elog(ERROR, "unable to read payload");
+		fclose(f);
+		payloads[i] = data;
+		payload_sizes[i] = size;
+	}
 }
 
 /*
@@ -146,6 +159,7 @@ test_pglz(PG_FUNCTION_ARGS)
 {
 	double results[10][10];
 	int iterations = 5;
+	prepare_payloads();
 	for (int p = 0; p < payload_count; p++)
 		for (int i = 0; i < decompressors_count; i++)
 		{
