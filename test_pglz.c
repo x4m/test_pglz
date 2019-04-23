@@ -173,12 +173,13 @@ test_pglz(PG_FUNCTION_ARGS)
 	for (int i = 1; i < decompressors_count; i++)
 	{
 		char msg[1024];
+		char* msgx = msg;
 		snprintf(msg, 1024, decompressor_name[i]);
 		for (int p = 0; p < payload_count; p++)
 		{
 			snprintf(msg, 1024, "%s\t%f", msg, results[p][i]);
 		}
-		ereport(LOG, (errmsg(msg), errhidestmt(true)));
+		ereport(LOG, (errmsg(msgx), errhidestmt(true)));
 	}
 
 	PG_RETURN_VOID();
