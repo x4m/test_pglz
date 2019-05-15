@@ -43,8 +43,21 @@ pglz_decompress_vanilla(const char *source, int32 slen, char *dest,
 int32
 pglz_decompress_hacked(const char *source, int32 slen, char *dest,
 						 int32 rawsize, bool check_complete);
+
 int32
-pglz_decompress_hacked2(const char *source, int32 slen, char *dest,
+pglz_decompress_hacked4(const char *source, int32 slen, char *dest,
+						 int32 rawsize, bool check_complete);
+
+int32
+pglz_decompress_hacked8(const char *source, int32 slen, char *dest,
+						 int32 rawsize, bool check_complete);
+
+int32
+pglz_decompress_hacked16(const char *source, int32 slen, char *dest,
+						 int32 rawsize, bool check_complete);
+
+int32
+pglz_decompress_hacked32(const char *source, int32 slen, char *dest,
 						 int32 rawsize, bool check_complete);
 
 
@@ -58,28 +71,35 @@ decompress_func decompressors[] =
 {
 	pglz_decompress_vanilla,
 	pglz_decompress_hacked,
-	pglz_decompress_hacked2,
+	pglz_decompress_hacked4,
+	pglz_decompress_hacked8,
+	pglz_decompress_hacked16,
+	pglz_decompress_hacked32,
 	pglz_decompress_vanilla,
 };
 char *decompressor_name[] = 
 {
 	"pglz_decompress_vanilla - warmup", /* do vanilla test at the beginning and at the end */
 	"pglz_decompress_hacked",
-	"pglz_decompress_hacked2",
+	"pglz_decompress_hacked4",
+	"pglz_decompress_hacked8",
+	"pglz_decompress_hacked16",
+	"pglz_decompress_hacked32",
 	"pglz_decompress_vanilla",
 };
 
-int decompressors_count = 4;
+int decompressors_count = 7;
 
 char *payload_names[] =
 {
 	"000000010000000000000001",
 	"000000010000000000000006",
+	"000000010000000000000008",
 	"16398",
 };
 void **payloads;
 long *payload_sizes;
-int payload_count = 3;
+int payload_count = 4;
 
 /* benchmark returns ns per byte of payload to decompress */
 double do_test(int compressor, int decompressor, int payload)
@@ -159,9 +179,11 @@ Datum
 test_pglz(PG_FUNCTION_ARGS)
 {
 	double results[10][10];
-	int iterations = 2;
+	int iterations = 1;
 	int iteration;
 	int i,p;
+	int old_verbosity = Log_error_verbosity;
+
 	prepare_payloads();
 	for (p = 0; p < payload_count; p++)
 		for (i = 0; i < decompressors_count; i++)
@@ -172,18 +194,17 @@ test_pglz(PG_FUNCTION_ARGS)
 			results[p][i] /= iterations;
 		}
 
+	Log_error_verbosity = PGERROR_TERSE;
 	ereport(NOTICE, (errmsg("Time to decompress one byte in ns:"), errhidestmt(true)));
-	for (i = 1; i < decompressors_count; i++)
+	for (p = 0; p < payload_count; p++)
 	{
-		char msg[1024];
-		char* msgx = msg;
-		snprintf(msg, 1024, "%s", decompressor_name[i]);
-		for (p = 0; p < payload_count; p++)
+		ereport(NOTICE, (errmsg("Payload %s", payload_names[p]), errhidestmt(true)));
+		for (i = 1; i < decompressors_count; i++)
 		{
-			snprintf(msg, 1024, "%s\t%f", msg, results[p][i]);
+			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], results[p][i]), errhidestmt(true)));
 		}
-		ereport(NOTICE, (errmsg("%s",msg), errhidestmt(true)));
 	}
+	Log_error_verbosity = old_verbosity;
 
 	PG_RETURN_VOID();
 }
