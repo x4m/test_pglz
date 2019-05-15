@@ -179,7 +179,7 @@ Datum
 test_pglz(PG_FUNCTION_ARGS)
 {
 	double results[10][10];
-	int iterations = 1;
+	int iterations = 5;
 	int iteration;
 	int i,p;
 	int old_verbosity = Log_error_verbosity;
