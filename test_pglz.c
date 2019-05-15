@@ -96,10 +96,11 @@ char *payload_names[] =
 	"000000010000000000000006",
 	"000000010000000000000008",
 	"16398",
+	"shakespeare.txt",
 };
 void **payloads;
 long *payload_sizes;
-int payload_count = 4;
+int payload_count = 5;
 
 /* benchmark returns ns per byte of payload to decompress */
 double do_test(int compressor, int decompressor, int payload)
