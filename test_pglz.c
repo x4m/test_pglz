@@ -128,8 +128,9 @@ static void prepare_payloads()
 	char path[MAXPGPATH];
 	FILE *f;
 	long size;
+	int i;
 
-	for (int i=0; i< payload_count; i++)
+	for (i=0; i< payload_count; i++)
 	{
 		get_share_path(my_exec_path, share_path);
 		snprintf(path, MAXPGPATH, "%s/extension/%s", share_path, payload_names[i]);
@@ -158,28 +159,30 @@ Datum
 test_pglz(PG_FUNCTION_ARGS)
 {
 	double results[10][10];
-	int iterations = 5;
+	int iterations = 2;
+	int iteration;
+	int i,p;
 	prepare_payloads();
-	for (int p = 0; p < payload_count; p++)
-		for (int i = 0; i < decompressors_count; i++)
+	for (p = 0; p < payload_count; p++)
+		for (i = 0; i < decompressors_count; i++)
 		{
 			results[p][i] = 0;
-			for (int iteration = 0; iteration < iterations; iteration++)
+			for (iteration = 0; iteration < iterations; iteration++)
 				results[p][i] += do_test(0, i, p);
 			results[p][i] /= iterations;
 		}
 
-	ereport(LOG, (errmsg("Time to decompress one byte in ns:"), errhidestmt(true)));
-	for (int i = 1; i < decompressors_count; i++)
+	ereport(NOTICE, (errmsg("Time to decompress one byte in ns:"), errhidestmt(true)));
+	for (i = 1; i < decompressors_count; i++)
 	{
 		char msg[1024];
 		char* msgx = msg;
-		snprintf(msg, 1024, decompressor_name[i]);
-		for (int p = 0; p < payload_count; p++)
+		snprintf(msg, 1024, "%s", decompressor_name[i]);
+		for (p = 0; p < payload_count; p++)
 		{
 			snprintf(msg, 1024, "%s\t%f", msg, results[p][i]);
 		}
-		ereport(LOG, (errmsg(msgx), errhidestmt(true)));
+		ereport(NOTICE, (errmsg("%s",msg), errhidestmt(true)));
 	}
 
 	PG_RETURN_VOID();
