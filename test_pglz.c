@@ -37,6 +37,10 @@ typedef int32 (*compress_func)(const char *source, int32 slen, char *dest,
 int32
 pglz_compress_vanilla(const char *source, int32 slen, char *dest,
 			  const PGLZ_Strategy *strategy);
+
+int32
+pglz_compress_hacked(const char *source, int32 slen, char *dest,
+			  const PGLZ_Strategy *strategy);
 int32
 pglz_decompress_vanilla(const char *source, int32 slen, char *dest,
 						 int32 rawsize, bool check_complete);
@@ -56,9 +60,9 @@ pglz_decompress_hacked16(const char *source, int32 slen, char *dest,
 double do_test(int compressor, int decompressor, int payload);
 double do_sliced_test(int compressor, int decompressor, int payload, int slice_size);
 
-compress_func compressors[] = {pglz_compress_vanilla};
-char *compressor_name[] = {"pglz_compress_vanilla"};
-int compressors_count = 1;
+compress_func compressors[] = {pglz_compress_vanilla, pglz_compress_hacked};
+char *compressor_name[] = {"pglz_compress_vanilla", "pglz_compress_hacked"};
+int compressors_count = 2;
 
 decompress_func decompressors[] =
 {
@@ -81,15 +85,18 @@ int decompressors_count = 5;
 
 char *payload_names[] =
 {
+	"adversary_rnd",
 	"000000010000000000000001",
 	"000000010000000000000006",
 	"000000010000000000000008",
 	"16398",
 	"shakespeare.txt",
+	//"adversary5",
+	//"adversary7",
 };
 void **payloads;
 long *payload_sizes;
-int payload_count = 5;
+int payload_count = 6;
 
 /* benchmark returns ns per byte of payload to decompress */
 double do_test(int compressor, int decompressor, int payload)
@@ -110,7 +117,7 @@ double do_test(int compressor, int decompressor, int payload)
 
 	clock_t decompression_begin = clock();
 	if (decompressors[decompressor](compressed, comp_size, extracted_data, size, true) != size)
-		elog(ERROR, "decompressed wrong size");
+		elog(ERROR, "decompressed wrong size %d instead of %d",decompressors[decompressor](compressed, comp_size, extracted_data, size, true),size);
 	clock_t decopmression_end = clock();
 
 	if (memcmp(extracted_data, data, size))
@@ -218,7 +225,7 @@ test_pglz(PG_FUNCTION_ARGS)
 	double sliced_8kb_results[10][10];
 
 	double decompressor_results[10];
-	int iterations = 5;
+	int iterations = 1;
 	int iteration;
 	int i,p;
 	int old_verbosity = Log_error_verbosity;
