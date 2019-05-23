@@ -57,8 +57,8 @@ pglz_decompress_hacked16(const char *source, int32 slen, char *dest,
 						 int32 rawsize, bool check_complete);
 
 
-double do_test(int compressor, int decompressor, int payload);
-double do_sliced_test(int compressor, int decompressor, int payload, int slice_size);
+double do_test(int compressor, int decompressor, int payload, bool decompression_time);
+double do_sliced_test(int compressor, int decompressor, int payload, int slice_size, bool decompression_time);
 
 compress_func compressors[] = {pglz_compress_vanilla, pglz_compress_hacked};
 char *compressor_name[] = {"pglz_compress_vanilla", "pglz_compress_hacked"};
@@ -99,7 +99,7 @@ long *payload_sizes;
 int payload_count = 6;
 
 /* benchmark returns ns per byte of payload to decompress */
-double do_test(int compressor, int decompressor, int payload)
+double do_test(int compressor, int decompressor, int payload, bool decompression_time)
 {
 	ereport(LOG,
 		(errmsg("Testing payload %s\tcompressor %s\tdecompressor %s",
@@ -133,10 +133,13 @@ double do_test(int compressor, int decompressor, int payload)
 	pfree(extracted_data);
 	pfree(compressed);
 
-	return ((double)decopmression_end - decompression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
+	if (decompression_time)
+		return ((double)decopmression_end - decompression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
+	else
+		return ((double)copmression_end - compression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
 }
 
-double do_sliced_test(int compressor, int decompressor, int payload, int slice_size)
+double do_sliced_test(int compressor, int decompressor, int payload, int slice_size, bool decompression_time)
 {
 	ereport(LOG,
 		(errmsg("Testing %dKb slicing payload %s\tcompressor %s\tdecompressor %s", slice_size / 1024,
@@ -155,8 +158,10 @@ double do_sliced_test(int compressor, int decompressor, int payload, int slice_s
 		compressed[i] = palloc(slice_size * 2);
 	}
 
+	clock_t compression_begin = clock();
 	for (i = 0; i < slice_count; i++)
 		comp_size[i] = compressors[compressor](data + slice_size * i, slice_size, compressed[i], PGLZ_strategy_default);
+	clock_t compression_end = clock();
 
 	clock_t decompression_begin = clock();
 	for (i = 0; i < slice_count; i++)
@@ -178,7 +183,10 @@ double do_sliced_test(int compressor, int decompressor, int payload, int slice_s
 	pfree(comp_size);
 	pfree(compressed);
 
-	return ((double)decopmression_end - decompression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
+	if (decompression_time)
+		return ((double)decopmression_end - decompression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
+	else
+		return ((double)compression_end - compression_begin) * (1000000000.0L / size) / CLOCKS_PER_SEC;
 }
 
 static void prepare_payloads()
@@ -220,12 +228,19 @@ static void prepare_payloads()
 Datum
 test_pglz(PG_FUNCTION_ARGS)
 {
-	double results[10][10];
-	double sliced_2kb_results[10][10];
-	double sliced_8kb_results[10][10];
+	double decompression_results[10][10];
+	double decompression_sliced_2kb_results[10][10];
+	double decompression_sliced_8kb_results[10][10];
 
 	double decompressor_results[10];
-	int iterations = 1;
+
+	double compression_results[10][10];
+	double compression_sliced_2kb_results[10][10];
+	double compression_sliced_8kb_results[10][10];
+
+	double compressor_results[10];
+
+	int iterations = 5;
 	int iteration;
 	int i,p;
 	int old_verbosity = Log_error_verbosity;
@@ -235,21 +250,42 @@ test_pglz(PG_FUNCTION_ARGS)
 		for (i = 0; i < decompressors_count; i++)
 		{
 			decompressor_results[i] = 0;
-			results[p][i] = 0;
+			decompression_results[p][i] = 0;
 			for (iteration = 0; iteration < iterations; iteration++)
-				results[p][i] += do_test(0, i, p);
-			results[p][i] /= iterations;
+				decompression_results[p][i] += do_test(0, i, p, true);
+			decompression_results[p][i] /= iterations;
 
-			sliced_2kb_results[p][i] = 0;
+			decompression_sliced_2kb_results[p][i] = 0;
 			for (iteration = 0; iteration < iterations; iteration++)
-				sliced_2kb_results[p][i] += do_sliced_test(0, i, p, 2048);
-			sliced_2kb_results[p][i] /= iterations;
-			results[p][i] /= iterations;
+				decompression_sliced_2kb_results[p][i] += do_sliced_test(0, i, p, 2048, true);
+			decompression_sliced_2kb_results[p][i] /= iterations;
+			decompression_results[p][i] /= iterations;
 
-			sliced_8kb_results[p][i] = 0;
+			decompression_sliced_8kb_results[p][i] = 0;
 			for (iteration = 0; iteration < iterations; iteration++)
-				sliced_8kb_results[p][i] += do_sliced_test(0, i, p, 4096);
-			sliced_8kb_results[p][i] /= iterations;
+				decompression_sliced_8kb_results[p][i] += do_sliced_test(0, i, p, 4096, true);
+			decompression_sliced_8kb_results[p][i] /= iterations;
+		}
+
+	for (p = 0; p < payload_count; p++)
+		for (i = 0; i < compressors_count; i++)
+		{
+			compressor_results[i] = 0;
+			compression_results[p][i] = 0;
+			for (iteration = 0; iteration < iterations; iteration++)
+				compression_results[p][i] += do_test(i, 0, p, false);
+			compression_results[p][i] /= iterations;
+
+			compression_sliced_2kb_results[p][i] = 0;
+			for (iteration = 0; iteration < iterations; iteration++)
+				compression_sliced_2kb_results[p][i] += do_sliced_test(i, 0, p, 2048, false);
+			compression_sliced_2kb_results[p][i] /= iterations;
+			compression_results[p][i] /= iterations;
+
+			compression_sliced_8kb_results[p][i] = 0;
+			for (iteration = 0; iteration < iterations; iteration++)
+				compression_sliced_8kb_results[p][i] += do_sliced_test(i, 0, p, 4096, false);
+			compression_sliced_8kb_results[p][i] /= iterations;
 		}
 
 	Log_error_verbosity = PGERROR_TERSE;
@@ -259,22 +295,22 @@ test_pglz(PG_FUNCTION_ARGS)
 		ereport(NOTICE, (errmsg("Payload %s", payload_names[p]), errhidestmt(true)));
 		for (i = 1; i < decompressors_count; i++)
 		{
-			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], results[p][i]), errhidestmt(true)));
-			decompressor_results[i] += results[p][i];
+			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], decompression_results[p][i]), errhidestmt(true)));
+			decompressor_results[i] += decompression_results[p][i];
 		}
 
 		ereport(NOTICE, (errmsg("Payload %s sliced by 2Kb", payload_names[p]), errhidestmt(true)));
 		for (i = 1; i < decompressors_count; i++)
 		{
-			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], sliced_2kb_results[p][i]), errhidestmt(true)));
-			decompressor_results[i] += sliced_2kb_results[p][i];
+			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], decompression_results[p][i]), errhidestmt(true)));
+			decompressor_results[i] += decompression_sliced_2kb_results[p][i];
 		}
 
 		ereport(NOTICE, (errmsg("Payload %s sliced by 8Kb", payload_names[p]), errhidestmt(true)));
 		for (i = 1; i < decompressors_count; i++)
 		{
-			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], sliced_8kb_results[p][i]), errhidestmt(true)));
-			decompressor_results[i] += sliced_8kb_results[p][i];
+			ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], decompression_sliced_8kb_results[p][i]), errhidestmt(true)));
+			decompressor_results[i] += decompression_sliced_8kb_results[p][i];
 		}
 	}
 
@@ -282,6 +318,38 @@ test_pglz(PG_FUNCTION_ARGS)
 	for (i = 1; i < decompressors_count; i++)
 	{
 		ereport(NOTICE, (errmsg("Decompressor %s result %f", decompressor_name[i], decompressor_results[i]), errhidestmt(true)));
+	}
+
+	Log_error_verbosity = PGERROR_TERSE;
+	ereport(NOTICE, (errmsg("Time to compress one byte in ns:"), errhidestmt(true)));
+	for (p = 0; p < payload_count; p++)
+	{
+		ereport(NOTICE, (errmsg("Payload %s", payload_names[p]), errhidestmt(true)));
+		for (i = 0; i < compressors_count; i++)
+		{
+			ereport(NOTICE, (errmsg("Compressor %s result %f", compressor_name[i], compression_results[p][i]), errhidestmt(true)));
+			compressor_results[i] += compression_results[p][i];
+		}
+
+		ereport(NOTICE, (errmsg("Payload %s sliced by 2Kb", payload_names[p]), errhidestmt(true)));
+		for (i = 0; i < compressors_count; i++)
+		{
+			ereport(NOTICE, (errmsg("Compressor %s result %f", compressor_name[i], compression_results[p][i]), errhidestmt(true)));
+			compressor_results[i] += compression_sliced_2kb_results[p][i];
+		}
+
+		ereport(NOTICE, (errmsg("Payload %s sliced by 8Kb", payload_names[p]), errhidestmt(true)));
+		for (i = 0; i < compressors_count; i++)
+		{
+			ereport(NOTICE, (errmsg("Compressor %s result %f", compressor_name[i], compression_sliced_8kb_results[p][i]), errhidestmt(true)));
+			compressor_results[i] += compression_sliced_8kb_results[p][i];
+		}
+	}
+
+	ereport(NOTICE, (errmsg("\n\nCompressor score (summ of all times):"), errhidestmt(true)));
+	for (i = 0; i < compressors_count; i++)
+	{
+		ereport(NOTICE, (errmsg("Compressor %s result %f", compressor_name[i], compressor_results[i]), errhidestmt(true)));
 	}
 
 	Log_error_verbosity = old_verbosity;
