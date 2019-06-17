@@ -246,6 +246,7 @@ test_pglz(PG_FUNCTION_ARGS)
 	int old_verbosity = Log_error_verbosity;
 
 	prepare_payloads();
+	
 	for (p = 0; p < payload_count; p++)
 		for (i = 0; i < decompressors_count; i++)
 		{

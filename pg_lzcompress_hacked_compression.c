@@ -357,13 +357,15 @@ do { \
 	}																		\
 } while (0)
 
-static bool fastmemcmp(char *a, char *b, int len, uint16 *rhash)
+static bool fastmemcmp(char *input, char *b, int len, uint16 *rhash)
 {
-	uint __rhnexta = ((uint)a + 1) % PGLZ_HISTORY_SIZE;
+	if (b + len >= input)
+		return true;
+	uint __rhnexta = ((uint)input + 1) % PGLZ_HISTORY_SIZE;
 	uint __rhnexta_end = (__rhnexta + len) % PGLZ_HISTORY_SIZE;
-	uint __rhnextb = ((uint)a + 1) % PGLZ_HISTORY_SIZE;
+	uint __rhnextb = ((uint)b + 1) % PGLZ_HISTORY_SIZE;
 	uint __rhnextb_end = (__rhnextb + len) % PGLZ_HISTORY_SIZE;
-	//return (rhash[__rhnexta_end] - rhash[__rhnexta]) == (rhash[__rhnextb_end] - rhash[__rhnextb]);
+	return (rhash[__rhnexta_end] - rhash[__rhnexta]) == (rhash[__rhnextb_end] - rhash[__rhnextb]);
 	return true;
 }
 
