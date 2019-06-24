@@ -188,6 +188,7 @@
 
 #define MAXPGPATH 1024
 
+#define uint64 uint64_t
 #define int32 int32_t
 #define uint32 uint32_t
 #define int16 int16_t
@@ -732,6 +733,54 @@ pglz_compress_vanilla(const char *source, int32 slen, char *dest,
 
 //----------------------------------------------------------------------------------------------------- 
 
+
+/*-************************************
+*  CPU Feature Detection
+**************************************/
+/* PGLZ_FORCE_MEMORY_ACCESS
+ * By default, access to unaligned memory is controlled by `memcpy()`, which is safe and portable.
+ * Unfortunately, on some target/compiler combinations, the generated assembly is sub-optimal.
+ * The below switch allow to select different access method for improved performance.
+ * Method 0 (default) : use `memcpy()`. Safe and portable.
+ * Method 1 : `__packed` statement. It depends on compiler extension (ie, not portable).
+ *            This method is safe if your compiler supports it, and *generally* as fast or faster than `memcpy`.
+ * Method 2 : direct access. This method is portable but violate C standard.
+ *            It can generate buggy code on targets which assembly generation depends on alignment.
+ *            But in some circumstances, it's the only known way to get the most performance (ie GCC + ARMv6)
+ * See https://fastcompression.blogspot.fr/2015/08/accessing-unaligned-memory.html for details.
+ * Prefer these methods in priority order (0 > 1 > 2)
+ */
+#ifndef PGLZ_FORCE_MEMORY_ACCESS   /* can be defined externally */
+#  if defined(__GNUC__) && \
+  ( defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) \
+  || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__) )
+#    define PGLZ_FORCE_MEMORY_ACCESS 2
+#  elif (defined(__INTEL_COMPILER) && !defined(_WIN32)) || defined(__GNUC__)
+#    define PGLZ_FORCE_MEMORY_ACCESS 1
+#  endif
+#endif
+
+#if defined(__x86_64__)
+  typedef uint64 reg_t;   /* 64-bits in x32 mode */
+#else
+  typedef size_t reg_t;   /* 32-bits in x32 mode */
+#endif
+
+#if defined(PGLZ_FORCE_MEMORY_ACCESS) && (PGLZ_FORCE_MEMORY_ACCESS==2)
+/* lie to the compiler about data alignment; use with caution */
+
+static uint32 pglz_read32(const void* ptr) { return *(const uint32*) ptr; }
+
+#else  /* safe and portable access using memcpy() */
+
+static uint32 pglz_read32(const void* ptr)
+{
+    uint32 val; memcpy(&val, ptr, sizeof(val)); return val;
+}
+
+#endif /* PGLZ_FORCE_MEMORY_ACCESS */
+
+
 typedef struct PGLZ_HistEntry1
 {
     int16 next_id;
@@ -773,6 +822,7 @@ pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char 
 	int32		len = 0;
 	int32		off = 0;
 	int32		thislen = 0;
+    int32 len_bound = Min(end - input, PGLZ_MAX_MATCH);
 
     good_drop = good_drop * 128 / 100;
 	/*
@@ -792,16 +842,7 @@ pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char 
 		const unsigned char *ip = input;
 		const unsigned char *hp = hent->pos;
         const unsigned char *my_pos;
-        const uint32* ip1 = input;
-        const uint32* hp1 = hent->pos;
-		int32		thisoff;
-        int32 len_bound = Min(end - ip, PGLZ_MAX_MATCH);
-
-		/*
-		 * Stop if the offset does not fit into our tag anymore.
-		 */
-		thisoff = ip - hp;
-
+		int32		thisoff = ip - hp;
 
 		/*
 		 * Determine length of match. A better match must be larger than the
@@ -816,15 +857,13 @@ pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char 
             if (memcmp(ip, hp, len) == 0)
             {
                 off = thisoff;
-                ip1 = ip + len;
-                hp1 = hp + len;
-                while(len <= len_bound - 4 && *ip1 == *hp1) {
+                ip += len;
+                hp += len;
+                while(len <= len_bound - 4 && pglz_read32(ip) == pglz_read32(hp) ) {
                     len += 4;
-                    ip1++;
-                    hp1++;
+                    ip += 4;
+                    hp += 4;
                 }
-                ip = ip1;
-                hp = hp1;
                 while (len < len_bound && *ip == *hp)
                 {
                     len++;
@@ -835,17 +874,15 @@ pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char 
 		}
 		else
 		{
-            if (*ip1 == *hp1) {
-                ip1++;
-                hp1++;
+            if (pglz_read32(ip) == pglz_read32(hp)) {
+                ip += 4;
+                hp += 4;
                 thislen = 4;
-                while(thislen <= len_bound - 4 && *ip1 == *hp1) {
+                while(thislen <= len_bound - 4 && pglz_read32(ip) == pglz_read32(hp)) {
                     thislen += 4;
-                    ip1++;
-                    hp1++;
+                    ip += 4;
+                    hp += 4;
                 }
-                ip = ip1;
-                hp = hp1;
                 while (thislen < len_bound && *ip == *hp)
                 {
                     thislen++;
@@ -866,6 +903,8 @@ pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char 
         good_match -= (good_match * good_drop) >> 7;
 	}
 
+    len = Min(len, len_bound);
+
 	if (len > 2)
 	{
 		*lenp = len;
@@ -875,9 +914,6 @@ pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char 
 
 	return 0;
 }
-
-
-
 
 
 int32
@@ -1610,12 +1646,12 @@ double do_test(int compressor, int decompressor, int payload, bool decompression
 double do_sliced_test(int compressor, int decompressor, int payload, int slice_size, bool decompression_time);
 
 compress_func compressors[] = {
-    pglz_compress_vanilla
-    , pglz_compress_hacked
+    pglz_compress_hacked
+    , pglz_compress_vanilla
 };
 char *compressor_name[] = {
-    "pglz_compress_vanilla"
-    , "pglz_compress_hacked"
+    "pglz_compress_hacked"
+    , "pglz_compress_vanilla"
 };
 int compressors_count = 2;
 
