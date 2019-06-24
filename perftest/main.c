@@ -189,7 +189,9 @@
 #define MAXPGPATH 1024
 
 #define int32 int32_t
+#define uint32 uint32_t
 #define int16 int16_t
+#define uint16 uint16_t
 #define int8 int8_t
 #define Min(_a, _b) ((_a) < (_b) ? (_a) : (_b))
 #define Max(_a, _b) ((_a) > (_b) ? (_a) : (_b))
@@ -213,7 +215,7 @@ typedef struct PGLZ_Strategy
  * ----------
  */
 #define PGLZ_MAX_HISTORY_LISTS	8192	/* must be power of 2 */
-#define PGLZ_HISTORY_SIZE		4096
+#define PGLZ_HISTORY_SIZE	    0x0fff - 1    /* to avoid compare in iteration */
 #define PGLZ_MAX_MATCH			273
 
 
@@ -733,29 +735,28 @@ pglz_compress_vanilla(const char *source, int32 slen, char *dest,
 typedef struct PGLZ_HistEntry1
 {
     int16 next_id;
-	int32			epoch;
+    uint16 hindex;
 	const unsigned char *pos;			/* my input position */
 } PGLZ_HistEntry1;
 
 static PGLZ_HistEntry1 hist_entries1[PGLZ_HISTORY_SIZE + 1];
 
 
-static inline int pglz_hist_idx1(const unsigned char* s, int mask) {
+static inline uint16 pglz_hist_idx1(const unsigned char* s, uint16 mask) {
     return ((s[0] << 6) ^ (s[1] << 4) ^ (s[2] << 2) ^ s[3]) & mask;
 }
 
-static inline int pglz_hist_add1(int hist_next, int *hindex, int32 epoch_counter, const unsigned char* s, int mask)
+static inline int16 pglz_hist_add1(int16 hist_next, uint16 *hindex, const unsigned char* s, uint16 mask)
 {
     int16* my_hist_start = &hist_start[*hindex];
     PGLZ_HistEntry1* entry = &(hist_entries1)[hist_next];
 
-    entry->epoch = epoch_counter;
-    entry->pos = s;
     entry->next_id = *my_hist_start;
+    entry->hindex = *hindex;
+    entry->pos = s;
     *my_hist_start = hist_next;
 
     *hindex = ((((*hindex) ^ (s[0] << 6)) << 2) ^ s[4]) & mask;
-    // hist_next = (hist_next & (PGLZ_HISTORY_SIZE - 1)) + 1;
     hist_next++;
     if (hist_next == PGLZ_HISTORY_SIZE + 1) {
         hist_next = 1;
@@ -764,11 +765,11 @@ static inline int pglz_hist_add1(int hist_next, int *hindex, int32 epoch_counter
 }
 
 static inline int
-pglz_find_match1(int hindex, const unsigned char *input, const unsigned char *end,
+pglz_find_match1(uint16 hindex, const unsigned char *input, const unsigned char *end,
 				int *lenp, int *offp, int good_match, int good_drop)
 {
 	PGLZ_HistEntry1 *hent;
-	int16		hentno;
+	int16		*hentno;
 	int32		len = 0;
 	int32		off = 0;
 	int32		thislen = 0;
@@ -777,27 +778,30 @@ pglz_find_match1(int hindex, const unsigned char *input, const unsigned char *en
 	/*
 	 * Traverse the linked history list until a good enough match is found.
 	 */
-	hentno = hist_start[hindex];
-    if (hentno == INVALID_ENTRY) {
+	hentno = &hist_start[hindex];
+    if (*hentno == INVALID_ENTRY) {
         return 0;
     }
-    hent = &hist_entries1[hentno];
+    hent = &hist_entries1[*hentno];
+    if (hindex != hent->hindex) {
+        *hentno = INVALID_ENTRY;
+        return 0;
+    }
     while(true)
 	{
 		const unsigned char *ip = input;
 		const unsigned char *hp = hent->pos;
-        const int32* ip1 = input;
-        const int32* hp1 = hent->pos;
+        const unsigned char *my_pos;
+        const uint32* ip1 = input;
+        const uint32* hp1 = hent->pos;
 		int32		thisoff;
         int32 len_bound = Min(end - ip, PGLZ_MAX_MATCH);
-        int32 my_epoch;
 
 		/*
 		 * Stop if the offset does not fit into our tag anymore.
 		 */
 		thisoff = ip - hp;
-		if (thisoff >= 0x0fff)
-			break;
+
 
 		/*
 		 * Determine length of match. A better match must be larger than the
@@ -855,9 +859,9 @@ pglz_find_match1(int hindex, const unsigned char *input, const unsigned char *en
                 }
             }
 		}
-        my_epoch = hent->epoch;
+        my_pos = hent->pos;
         hent = &hist_entries1[hent->next_id];
-        if (len >= good_match || my_epoch <= hent->epoch)
+        if (len >= good_match || my_pos <= hent->pos || hindex != hent->hindex)
             break;
         good_match -= (good_match * good_drop) >> 7;
 	}
@@ -882,7 +886,7 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
 {
 	unsigned char *bp = (unsigned char *) dest;
 	unsigned char *bstart = bp;
-	int			hist_next = 1;
+	uint16			hist_next = 1;
 	const unsigned char *dp = (const unsigned char*)source;
 	const unsigned char *dend = (const unsigned char*)source + slen;
     const unsigned char *compressing_dend = dend - 4;
@@ -899,9 +903,8 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
 	int32		result_max;
 	int32		need_rate;
 	int			hashsz;
-	int			mask;
-    int hist_idx;
-    int32 epoch_counter = 0;
+	uint16			mask;
+    uint16 hist_idx;
 
 
 	/*
@@ -976,7 +979,7 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
 	 * hist_entries[] array; its entries are initialized as they are used.
 	 */
 	memset(hist_start, 0, hashsz * sizeof(int16));
-    hist_entries1[INVALID_ENTRY].epoch = INT32_MAX;
+    hist_entries1[INVALID_ENTRY].pos = dend;
     hist_idx = pglz_hist_idx1(dp, mask);
 
 	/*
@@ -1027,9 +1030,8 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
             bp = pglz_put_tag(bp, match_len, match_off);
 			while (match_len--)
 			{
-				hist_next = pglz_hist_add1(hist_next, &hist_idx, epoch_counter, dp, mask);
+				hist_next = pglz_hist_add1(hist_next, &hist_idx, dp, mask);
 				dp++;			/* Do not do this ++ in the line above! */
-                ++epoch_counter;
 				/* The macro would do it four times - Jan.  */
 			}
 			found_match = true;
@@ -1039,10 +1041,9 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
 			/*
 			 * No match found. Copy one literal byte.
 			 */
-			hist_next = pglz_hist_add1(hist_next, &hist_idx, epoch_counter, dp, mask);
+			hist_next = pglz_hist_add1(hist_next, &hist_idx, dp, mask);
             *(bp)++ = (unsigned char)(*dp);
 			dp++;				/* Do not do this ++ in the line above! */
-            ++epoch_counter;
 			/* The macro would do it four times - Jan.  */
 		}
         ctrl <<= 1;
@@ -1610,13 +1611,13 @@ double do_sliced_test(int compressor, int decompressor, int payload, int slice_s
 
 compress_func compressors[] = {
     pglz_compress_vanilla
-//    , pglz_compress_hacked
+    , pglz_compress_hacked
 };
 char *compressor_name[] = {
     "pglz_compress_vanilla"
-//    , "pglz_compress_hacked"
+    , "pglz_compress_hacked"
 };
-int compressors_count = 1;
+int compressors_count = 2;
 
 decompress_func decompressors[] =
 {
