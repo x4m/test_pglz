@@ -1029,6 +1029,7 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
 			{
 				hist_next = pglz_hist_add1(hist_next, &hist_idx, epoch_counter, dp, mask);
 				dp++;			/* Do not do this ++ in the line above! */
+                ++epoch_counter;
 				/* The macro would do it four times - Jan.  */
 			}
 			found_match = true;
@@ -1041,10 +1042,10 @@ pglz_compress_hacked(const char *source, int32 slen, char *dest,
 			hist_next = pglz_hist_add1(hist_next, &hist_idx, epoch_counter, dp, mask);
             *(bp)++ = (unsigned char)(*dp);
 			dp++;				/* Do not do this ++ in the line above! */
+            ++epoch_counter;
 			/* The macro would do it four times - Jan.  */
 		}
         ctrl <<= 1;
-        ++epoch_counter;
 	}
 
 
@@ -1607,9 +1608,15 @@ pglz_decompress_hacked16(const char *source, int32 slen, char *dest,
 double do_test(int compressor, int decompressor, int payload, bool decompression_time);
 double do_sliced_test(int compressor, int decompressor, int payload, int slice_size, bool decompression_time);
 
-compress_func compressors[] = {pglz_compress_vanilla, pglz_compress_hacked};
-char *compressor_name[] = {"pglz_compress_vanilla", "pglz_compress_hacked"};
-int compressors_count = 2;
+compress_func compressors[] = {
+    pglz_compress_vanilla
+//    , pglz_compress_hacked
+};
+char *compressor_name[] = {
+    "pglz_compress_vanilla"
+//    , "pglz_compress_hacked"
+};
+int compressors_count = 1;
 
 decompress_func decompressors[] =
 {
@@ -1781,7 +1788,7 @@ void test_pglz()
 
 	double compressor_results[10];
 
-	int iterations = 5;
+	int iterations = 1;
 	int iteration;
 	int i,p;
 
