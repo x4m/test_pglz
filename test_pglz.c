@@ -85,7 +85,7 @@ int decompressors_count = 5;
 
 char *payload_names[] =
 {
-	"adversary_rnd",
+	//"adversary_rnd",
 	"000000010000000000000001",
 	"000000010000000000000006",
 	"000000010000000000000008",
@@ -96,7 +96,7 @@ char *payload_names[] =
 };
 void **payloads;
 long *payload_sizes;
-int payload_count = 6;
+int payload_count = 5;
 
 /* benchmark returns ns per byte of payload to decompress */
 double do_test(int compressor, int decompressor, int payload, bool decompression_time)
