@@ -42,6 +42,9 @@ int32
 pglz_compress_hacked(const char *source, int32 slen, char *dest,
 			  const PGLZ_Strategy *strategy);
 int32
+pglz_decompress_hacked_unrolled(const char *source, int32 slen, char *dest,
+			  const PGLZ_Strategy *strategy);
+int32
 pglz_decompress_vanilla(const char *source, int32 slen, char *dest,
 						 int32 rawsize, bool check_complete);
 int32
@@ -68,6 +71,7 @@ decompress_func decompressors[] =
 {
 	pglz_decompress_vanilla,
 	pglz_decompress_hacked,
+	pglz_decompress_hacked_unrolled,
 	pglz_decompress_hacked8,
 	pglz_decompress_hacked16,
 	pglz_decompress_vanilla,
@@ -76,6 +80,7 @@ char *decompressor_name[] =
 {
 	"pglz_decompress_vanilla - warmup", /* do vanilla test at the beginning and at the end */
 	"pglz_decompress_hacked",
+	"pglz_decompress_hacked_unrolled",
 	"pglz_decompress_hacked8",
 	"pglz_decompress_hacked16",
 	"pglz_decompress_vanilla",
