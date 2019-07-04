@@ -86,7 +86,7 @@ char *decompressor_name[] =
 	"pglz_decompress_vanilla",
 };
 
-int decompressors_count = 5;
+int decompressors_count = 6;
 
 char *payload_names[] =
 {
