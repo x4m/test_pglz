@@ -21,3 +21,5 @@ To do this you should
 3. make -j4 install
 4. Clone this repo to ~/project/pgsql/conrib/test_pglz/ and cd there
 5. run ./test.sh
+
+Inspired by [optimization](https://habr.com/en/company/yandex/blog/457612/) of Lz4 in [ClickHouse](https://github.com/yandex/ClickHouse/)
