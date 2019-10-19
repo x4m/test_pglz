@@ -55,12 +55,12 @@ pglz_decompress_hacked(const char *source, int32 slen, char *dest,
 				 * extremely!
 				 */
 				len = Min(len, destend - dp);
-				while (off <= len)
+				while (off < len)
 				{
 					memcpy(dp, dp - off, off);
 					len -= off;
 					dp+=off;
-					off *= 2;
+					off += off;
 				}
 				memcpy(dp, dp - off, len);
 				dp+=len;
