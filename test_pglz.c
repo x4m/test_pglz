@@ -98,10 +98,11 @@ char *payload_names[] =
 	"shakespeare.txt",
 	//"adversary5",
 	//"adversary7",
+	"mr","dickens","mozilla","nci","ooffice","osdb","reymont","samba","sao","webster","x-ray","xml"
 };
 void **payloads;
 long *payload_sizes;
-int payload_count = 5;
+int payload_count = 17;
 
 /* benchmark returns ns per byte of payload to decompress */
 double do_test(int compressor, int decompressor, int payload, bool decompression_time)
